@@ -23,39 +23,42 @@ fun main(args: Array<String>) {
     id.compareAndSet(null, 0)
 
     // Run command line resolution
-    val qargs = 1 until args.size
+    // val qargs = 1 until args.size
+    val qargs = args.slice(1 until args.size).toMutableList()
     when (args.getOrNull(0)) {
-        "show" -> showCommand(library, args.slice(qargs))
-        "add" -> addCommand(library, getAndInc(id), args.slice(qargs))
-        "del" -> deleteCommand(library, args.slice(qargs))
-        "set" -> updateCommand(library, args.slice(qargs))
-        else -> displayHelp(args.slice(qargs))
+        "show" -> showCommand(library, qargs)
+        "add" -> addCommand(library, getAndInc(id), qargs)
+        "del" -> deleteCommand(library, qargs)
+        "set" -> updateCommand(library, qargs)
+        else -> displayHelp(qargs)
     }
 
     db.close();
 }
 
 
-fun showCommand(lib: HTreeMap<Long, String>, args: List<String>) {
+fun showCommand(lib: HTreeMap<Long, String>, args: MutableList<String>) {
     val disp = parseDisplay(args)
     val predicate = parsePred(args)
     
+    // todo: Need to calculate display info (particularly width) before running display function
     val toDisplay = lib.map { it.value.toBook() }
                        .filter { predicate(it) }
     
-    // TODO: Calculate display info before running display function
+    disp.printHeader()
+
     var pages = 0
     var read = 0
     toDisplay.forEach {
-        disp(it)
-        read += it.component4()
+        disp.printObject(it)
         pages += it.component3()
+        read += it.component4()
     }
 
     println("TOTAL = read:$read pages:$pages")
 }
 
-fun addCommand(lib: HTreeMap<Long, String>, id: Long, args: List<String>) {
+fun addCommand(lib: HTreeMap<Long, String>, id: Long, args: MutableList<String>) {
     if (args.size < 4) return displayHelp("add", args)
 
     // TODO: Handle unexpected values more gracefully (read can default to 0)
@@ -63,22 +66,19 @@ fun addCommand(lib: HTreeMap<Long, String>, id: Long, args: List<String>) {
     lib.put(id, inset.toString())
 }
 
-fun deleteCommand(lib: HTreeMap<Long, String>, args: List<String>) {
+fun deleteCommand(lib: HTreeMap<Long, String>, args: MutableList<String>) {
     if (args.getOrNull(0) != "where") return displayHelp("del", args)
 
-    val predicate = parsePred(args.slice(1 until args.size))
-
+    val predicate = parsePred(args.slice(1 until args.size).toMutableList())
     for (key in lib.filterValues { predicate(it.toBook()) }.map { it.key }) {
        lib.remove(key)
     }
-
-    println("Delete $args")
 }
 
-fun updateCommand(lib: HTreeMap<Long, String>, args: List<String>) {
+fun updateCommand(lib: HTreeMap<Long, String>, args: MutableList<String>) {
     if (args.size < 4) return displayHelp("set", args)
 
-    val predicate = parsePred(args.slice(2 until args.size))
+    val predicate = parsePred(args.slice(2 until args.size).toMutableList())
     val field = args[0]
 
     for ((k, v) in lib) {
@@ -96,44 +96,35 @@ fun updateCommand(lib: HTreeMap<Long, String>, args: List<String>) {
             lib.put(k, nbk.toString())
         }
     }
-
-    println("Update $args")
 }
 
-fun displayHelp(args: List<String>) {
+fun displayHelp(args: MutableList<String>) {
     println("Help $args!")
 }
 
-fun displayHelp(cmd: String, args: List<String>) {
+fun displayHelp(cmd: String, args: MutableList<String>) {
     println("Help:$cmd $args!")
 }
 
 
 // SQLish parsing functions
-fun parseDisplay(args: List<String>): (Book) -> Unit {
-    return fun(bk: Book) {
-        val (title, author, pages, read) = bk
-        println("$title | $author | $pages | $read")
+fun parseDisplay(args: MutableList<String>): Displayer {
+    if (args.size == 0) return Displayer()
+
+    return when (args.removeAt(0)) {
+        "_" -> Displayer()
+        "where" -> Displayer()
+        else -> Displayer()
     }
 }
 
-fun parsePred(args: List<String>): (Book) -> Boolean {
+fun parsePred(args: MutableList<String>): (Book) -> Boolean {
     if (args.size < 4) return ::theTruth
     if (args[0] != "where") return ::theTruth
-    
-    // todo: parse out the data to extract
-    val field = args[1]
-    // val relation = args[2]
-    // val val = args[3]
 
+    val relation = getRelation(args[1], args[2], args[3])
     return fun(bk: Book): Boolean {
-        return when (field) {
-            "author" -> true
-            "title" -> true
-            "pages" -> true
-            "read" -> true
-            else -> false
-        }
+        return relation.call(bk)
     }
 }
 
