@@ -4,6 +4,9 @@ import org.mapdb.*
 import org.mapdb.serializer.*
 
 
+// todo: improve displaying (pre-calculate width, pad out with spaces)
+// todo: add more filter options
+
 fun main(args: Array<String>) {
     // setup the database
     var db = DBMaker
@@ -61,9 +64,12 @@ fun showCommand(lib: HTreeMap<Long, String>, args: MutableList<String>) {
 fun addCommand(lib: HTreeMap<Long, String>, id: Long, args: MutableList<String>) {
     if (args.size < 4) return displayHelp("add", args)
 
-    // TODO: Handle unexpected values more gracefully (read can default to 0)
-    val inset = Book(args[0], args[1], args[2].toInt(), args[3].toInt())
-    lib.put(id, inset.toString())
+    try {
+        val inset = Book(args[0], args[1], args[2].toInt(), args[3].toInt())
+        lib.put(id, inset.toString())
+    } catch (e: NumberFormatException) {
+        displayHelp("add", args)
+    }
 }
 
 fun deleteCommand(lib: HTreeMap<Long, String>, args: MutableList<String>) {
