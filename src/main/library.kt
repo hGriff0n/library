@@ -2,10 +2,14 @@ package libr
 
 import org.mapdb.*
 import org.mapdb.serializer.*
+import kotlin.comparisons.compareBy
 
 
-// todo: improve displaying (pre-calculate width, pad out with spaces)
+// todo: improve predicate filtering to allow for internal comparisons
+    // ie. show _ where read == pages
 // todo: add more filter options
+// todo: add in the capability to selectively show columns
+// todo: add in some basic aggretgate functions (such as count)
 
 fun main(args: Array<String>) {
     // setup the database
@@ -44,9 +48,12 @@ fun showCommand(lib: HTreeMap<Long, String>, args: MutableList<String>) {
     val disp = parseDisplay(args)
     val predicate = parsePred(args)
     
-    // todo: Need to calculate display info (particularly width) before running display function
     val toDisplay = lib.map { it.value.toBook() }
                        .filter { predicate(it) }
+                       .sortedWith(compareBy({ it.component3() }))
+                       .reversed()           // sortedWith puts this in the wrong order
+
+    disp.determineWidths(toDisplay)
     
     disp.printHeader()
 
@@ -58,7 +65,7 @@ fun showCommand(lib: HTreeMap<Long, String>, args: MutableList<String>) {
         read += it.component4()
     }
 
-    println("TOTAL = read:$read pages:$pages")
+    println("\nTOTAL: $pages | READ: $read")
 }
 
 fun addCommand(lib: HTreeMap<Long, String>, id: Long, args: MutableList<String>) {
