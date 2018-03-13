@@ -1,2 +1,10 @@
 
 target/
+
+\.vscode/
+
+*.cpp
+
+*.exe
+
+*.db

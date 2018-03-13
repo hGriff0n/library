@@ -3,6 +3,9 @@ package libr
 import org.mapdb.*
 import org.mapdb.serializer.*
 import kotlin.comparisons.compareBy
+import java.io.File
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 
 // todo: improve predicate filtering to allow for internal comparisons
@@ -10,6 +13,10 @@ import kotlin.comparisons.compareBy
 // todo: add more filter options
 // todo: add in the capability to selectively show columns
 // todo: add in some basic aggretgate functions (such as count)
+// todo: add klib on to the path
+// todo: warn if an id is reaching the maximum value
+
+// NOTE: Run `mvn package` to build
 
 fun main(args: Array<String>) {
     // setup the database
@@ -23,20 +30,31 @@ fun main(args: Array<String>) {
     var library = db.hashMap("name_of_map")
         .keySerializer(Serializer.LONG)
         .valueSerializer(Serializer.STRING)
-        .createOrOpen();
+        .createOrOpen()
 
     // Get the id counter
-    var id = db.atomicVar("maxId", Serializer.LONG).createOrOpen();
+    var id = db.atomicVar("maxId", Serializer.LONG).createOrOpen()
     id.compareAndSet(null, 0)
+
+    // Create the history database
+    var history = db.hashMap("read_history")
+        .keySerializer(Serializer.LONG)
+        .valueSerializer(Serializer.STRING)
+        .createOrOpen()
+
+    // Create the history counter
+    var historyCounter = db.atomicVar("index", Serializer.LONG).createOrOpen()
+    historyCounter.compareAndSet(null, 0)
 
     // Run command line resolution
     // val qargs = 1 until args.size
     val qargs = args.slice(1 until args.size).toMutableList()
     when (args.getOrNull(0)) {
         "show" -> showCommand(library, qargs)
-        "add" -> addCommand(library, getAndInc(id), qargs)
+        "add" -> addCommand(library, getAndInc(id), qargs, history, historyCounter)
         "del" -> deleteCommand(library, qargs)
-        "set" -> updateCommand(library, qargs)
+        "set" -> updateCommand(library, qargs, history, historyCounter)
+        "history" -> debugHistory(history, historyCounter)
         else -> displayHelp(qargs)
     }
 
@@ -65,15 +83,21 @@ fun showCommand(lib: HTreeMap<Long, String>, args: MutableList<String>) {
         read += it.component4()
     }
 
-    println("\nTOTAL: $pages | READ: $read")
+    println("\nTOTAL: $pages | UNREAD: ${pages-read} | READ: $read")
 }
 
-fun addCommand(lib: HTreeMap<Long, String>, id: Long, args: MutableList<String>) {
+fun addCommand(lib: HTreeMap<Long, String>, id: Long, args: MutableList<String>, history: HTreeMap<Long, String>, historyCounter: Atomic.Var<Long>) {
     if (args.size < 4) return displayHelp("add", args)
 
     try {
         val inset = Book(args[0], args[1], args[2].toInt(), args[3].toInt())
         lib.put(id, inset.toString())
+
+        val current = LocalDateTime.now()
+        val formatted = current.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+
+        history.put(getAndInc(historyCounter), "read ||${args[0]};;${args[1]}|| ${inset.read} $formatted")
+
     } catch (e: NumberFormatException) {
         displayHelp("add", args)
     }
@@ -88,11 +112,14 @@ fun deleteCommand(lib: HTreeMap<Long, String>, args: MutableList<String>) {
     }
 }
 
-fun updateCommand(lib: HTreeMap<Long, String>, args: MutableList<String>) {
+fun updateCommand(lib: HTreeMap<Long, String>, args: MutableList<String>, history: HTreeMap<Long, String>, historyCounter: Atomic.Var<Long>) {
     if (args.size < 4) return displayHelp("set", args)
 
     val predicate = parsePred(args.slice(2 until args.size).toMutableList())
     val field = args[0]
+
+    val current = LocalDateTime.now()
+    val formatted = current.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
     for ((k, v) in lib) {
         val bk = v.toBook()
@@ -106,8 +133,15 @@ fun updateCommand(lib: HTreeMap<Long, String>, args: MutableList<String>) {
                 else -> return displayHelp("set", args)
             }
 
+            history.put(getAndInc(historyCounter), "read ||${bk.title};;${bk.author}|| ${nbk.read - bk.read} $formatted")
             lib.put(k, nbk.toString())
         }
+    }
+}
+
+fun debugHistory(history: HTreeMap<Long, String>, historyCounter: Atomic.Var<Long>) {
+    for (i in 0..historyCounter.get() - 1) {
+        println(history.get(i))
     }
 }
 

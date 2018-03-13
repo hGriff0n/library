@@ -27,10 +27,9 @@ class Predicate(val field: String) {
 
 fun getRelation(field: String, relation: String, obj: String): Predicate {
     val rel = when (relation.toLowerCase()) {
-        // This doesn't quite work (doesn't show enough)
+        "is" -> fun (s: String): Boolean { return s.equals(obj) }
         "startswith" -> fun (s: String): Boolean { return s.startsWith(obj) }
         "==" -> fun (s: String): Boolean { return obj.equals(s) }
-        // this doesn't work
         ">" -> fun (s: String): Boolean { return s.toInt() > obj.toInt() }
         else -> fun (s: String): Boolean { return s != null }
     }
